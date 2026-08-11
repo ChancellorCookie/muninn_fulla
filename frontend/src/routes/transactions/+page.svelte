@@ -11,6 +11,7 @@
 
 	let selectedAccount = $state('');
 	let statusFilter = $state(''); // '' = all, 'pending', 'posted'
+	let monthFilter = $state(''); // '' = all, '2026-08' etc.
 	let selected = $state<Set<string>>(new Set());
 	let showModal = $state(false);
 	let selectedCategory = $state('');
@@ -32,7 +33,7 @@
 
 	async function loadTx() {
 		try {
-			const result = await txApi.list({ account: selectedAccount || undefined, status: statusFilter || undefined });
+			const result = await txApi.list({ account: selectedAccount || undefined, status: statusFilter || undefined, month: monthFilter || undefined });
 			if (Array.isArray(result)) {
 				txList = result;
 				selected = new Set();
@@ -41,7 +42,7 @@
 			console.error('loadTx failed:', e);
 		}
 	}
-	$effect(() => { selectedAccount; statusFilter; loadTx(); });
+	$effect(() => { selectedAccount; statusFilter; monthFilter; loadTx(); });
 	function toggleSelect(id: string) {
 		const next = new Set(selected);
 		if (next.has(id)) next.delete(id); else next.add(id);
@@ -168,6 +169,7 @@
 	function catById(id: string) { return catMap.get(id); }
 
 	const pendingCount = $derived((txList || []).filter(t => t.status === 'pending').length);
+	const months = ['2026-08','2026-07','2026-06','2026-05','2026-04','2026-03','2026-02','2026-01'];
 </script>
 
 <svelte:window onkeydown={(e) => { if (e.key === 'Escape') closeModal(); }} />
@@ -182,6 +184,10 @@
 		<option value="">Alle</option>
 		<option value="pending">Offen ({pendingCount})</option>
 		<option value="posted">Bestätigt</option>
+	</select>
+	<select bind:value={monthFilter} style="width:auto">
+		<option value="">Alle Monate</option>
+		{#each months as m}<option value={m}>{m}</option>{/each}
 	</select>
 	<button class="primary" onclick={() => showModal = true}><Icon name="plus" /> Neu</button>
 	<button onclick={() => (document.querySelector('input[type=file]') as HTMLInputElement)?.click()}><Icon name="upload" /> CSV</button>
