@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -152,7 +153,8 @@ func (h *Handler) ListTransactions(w http.ResponseWriter, r *http.Request) {
 	accountID := r.URL.Query().Get("account")
 	month := r.URL.Query().Get("month")
 	status := r.URL.Query().Get("status")
-	txs, err := h.DB.GetTransactions(accountID, month, status, 500)
+	search := r.URL.Query().Get("search")
+	txs, err := h.DB.GetTransactions(accountID, month, status, search, 500)
 	if err != nil {
 		writeError(w, 500, err.Error())
 		return
@@ -348,4 +350,24 @@ func (h *Handler) GetRecurringHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, history)
+}
+
+// --- Annual ---
+
+func (h *Handler) AnnualSummary(w http.ResponseWriter, r *http.Request) {
+	yearStr := r.URL.Query().Get("year")
+	if yearStr == "" {
+		yearStr = time.Now().UTC().Format("2006")
+	}
+	year, err := strconv.Atoi(yearStr)
+	if err != nil {
+		writeError(w, 400, "invalid year")
+		return
+	}
+	s, err := h.DB.GetAnnualSummary(year)
+	if err != nil {
+		writeError(w, 500, err.Error())
+		return
+	}
+	writeJSON(w, 200, s)
 }

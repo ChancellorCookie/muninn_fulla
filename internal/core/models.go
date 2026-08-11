@@ -141,3 +141,28 @@ type CategorySummary struct {
 	Amount       float64 `json:"amount"`
 	Count        int     `json:"count"`
 }
+
+// --- Annual overview ---
+
+type AnnualSummary struct {
+	Year   int             `json:"year"`
+	Months []MonthOverview `json:"months"`
+	Totals AnnualTotals    `json:"totals"`
+}
+
+type MonthOverview struct {
+	Month          string  `json:"month"` // YYYY-MM
+	Income         float64 `json:"income"`          // recurring income
+	Expenses       float64 `json:"expenses"`        // recurring expenses
+	ExtraIncome    float64 `json:"extra_income"`    // one-time income
+	ExtraExpenses  float64 `json:"extra_expenses"`  // one-time expenses
+	Balance        float64 `json:"balance"`
+}
+
+type AnnualTotals struct {
+	Income        float64 `json:"income"`
+	Expenses      float64 `json:"expenses"`
+	ExtraIncome   float64 `json:"extra_income"`
+	ExtraExpenses float64 `json:"extra_expenses"`
+	Balance       float64 `json:"balance"`
+}

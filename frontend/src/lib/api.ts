@@ -44,11 +44,12 @@ export const categories = {
 };
 
 export const transactions = {
-	list: (filters?: { account?: string; month?: string; status?: string }) => {
+	list: (filters?: { account?: string; month?: string; status?: string; search?: string }) => {
 		const params = new URLSearchParams();
 		if (filters?.account) params.set('account', filters.account);
 		if (filters?.month) params.set('month', filters.month);
 		if (filters?.status) params.set('status', filters.status);
+		if (filters?.search) params.set('search', filters.search);
 		const q = params.toString();
 		return api<import('./types').Transaction[]>(`/transactions${q ? '?' + q : ''}`);
 	},

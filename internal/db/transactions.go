@@ -70,13 +70,14 @@ func (db *DB) CreateTransactionWithStatus(r core.CreateTransactionRequest, statu
 	return t, nil
 }
 
-func (db *DB) GetTransactions(accountID, month, status string, limit int) ([]core.Transaction, error) {
+func (db *DB) GetTransactions(accountID, month, status, search string, limit int) ([]core.Transaction, error) {
 	query := "SELECT id, account_id, category_id, amount, description, date, note, status, recurring_match_id, created_at FROM transactions"
 	var args []any
 	var conditions []string
 	if accountID != "" { conditions = append(conditions, "account_id = ?"); args = append(args, accountID) }
 	if month != "" { conditions = append(conditions, "date LIKE ?"); args = append(args, month+"%") }
 	if status != "" { conditions = append(conditions, "status = ?"); args = append(args, status) }
+	if search != "" { conditions = append(conditions, "(description LIKE ? OR note LIKE ?)"); args = append(args, "%"+search+"%", "%"+search+"%") }
 	if len(conditions) > 0 {
 		query += " WHERE " + conditions[0]
 		for _, c := range conditions[1:] { query += " AND " + c }
@@ -171,7 +172,7 @@ func (db *DB) UpdateTransaction(id string, r core.CreateTransactionRequest) erro
 func (db *DB) GetMonthSummary(accountID, month string) (*core.MonthSummary, error) {
 	query := `SELECT COALESCE(SUM(CASE WHEN amount > 0 THEN amount ELSE 0 END), 0),
 	                 COALESCE(SUM(CASE WHEN amount < 0 THEN amount ELSE 0 END), 0)
-	          FROM transactions WHERE date LIKE ? AND status = 'posted'`
+	          FROM transactions WHERE date LIKE ? AND status = 'posted' AND recurring_match_id = ''`
 	args := []any{month + "%"}
 	if accountID != "" { query += " AND account_id = ?"; args = append(args, accountID) }
 
@@ -223,4 +224,40 @@ func strsToAnys(ss []string) []any {
 	out := make([]any, len(ss))
 	for i, s := range ss { out[i] = s }
 	return out
+}
+
+// GetAnnualSummary computes per-month overview for a year
+func (db *DB) GetAnnualSummary(year int) (*core.AnnualSummary, error) {
+	// Group posted transactions by month, split by recurring_match_id
+	rows, err := db.conn.Query(
+		`SELECT substr(date,1,7) AS month,
+		        SUM(CASE WHEN amount > 0 AND recurring_match_id != '' THEN amount ELSE 0 END),
+		        SUM(CASE WHEN amount < 0 AND recurring_match_id != '' THEN amount ELSE 0 END),
+		        SUM(CASE WHEN amount > 0 AND recurring_match_id = '' THEN amount ELSE 0 END),
+		        SUM(CASE WHEN amount < 0 AND recurring_match_id = '' THEN amount ELSE 0 END)
+		 FROM transactions
+		 WHERE status = 'posted' AND date LIKE ?
+		 GROUP BY month ORDER BY month`,
+		fmt.Sprintf("%d-%%", year),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	as := &core.AnnualSummary{Year: year}
+	for rows.Next() {
+		var m core.MonthOverview
+		if err := rows.Scan(&m.Month, &m.Income, &m.Expenses, &m.ExtraIncome, &m.ExtraExpenses); err != nil {
+			continue
+		}
+		m.Balance = m.Income + m.Expenses + m.ExtraIncome + m.ExtraExpenses
+		as.Months = append(as.Months, m)
+		as.Totals.Income += m.Income
+		as.Totals.Expenses += m.Expenses
+		as.Totals.ExtraIncome += m.ExtraIncome
+		as.Totals.ExtraExpenses += m.ExtraExpenses
+	}
+	as.Totals.Balance = as.Totals.Income + as.Totals.Expenses + as.Totals.ExtraIncome + as.Totals.ExtraExpenses
+	return as, rows.Err()
 }

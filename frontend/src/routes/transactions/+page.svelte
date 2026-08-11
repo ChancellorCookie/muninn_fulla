@@ -12,7 +12,9 @@
 	let selectedAccount = $state('');
 	let statusFilter = $state(''); // '' = all, 'pending', 'posted'
 	let monthFilter = $state(''); // '' = all, '2026-08' etc.
+	let searchFilter = $state('');
 	let selected = $state<Set<string>>(new Set());
+
 	let showModal = $state(false);
 	let selectedCategory = $state('');
 	let amount = $state('');
@@ -33,7 +35,7 @@
 
 	async function loadTx() {
 		try {
-			const result = await txApi.list({ account: selectedAccount || undefined, status: statusFilter || undefined, month: monthFilter || undefined });
+			const result = await txApi.list({ account: selectedAccount || undefined, status: statusFilter || undefined, month: monthFilter || undefined, search: searchFilter || undefined });
 			if (Array.isArray(result)) {
 				txList = result;
 				selected = new Set();
@@ -42,7 +44,7 @@
 			console.error('loadTx failed:', e);
 		}
 	}
-	$effect(() => { selectedAccount; statusFilter; monthFilter; loadTx(); });
+	$effect(() => { selectedAccount; statusFilter; monthFilter; searchFilter; loadTx(); });
 	function toggleSelect(id: string) {
 		const next = new Set(selected);
 		if (next.has(id)) next.delete(id); else next.add(id);
@@ -169,7 +171,14 @@
 	function catById(id: string) { return catMap.get(id); }
 
 	const pendingCount = $derived((txList || []).filter(t => t.status === 'pending').length);
-	const months = ['2026-08','2026-07','2026-06','2026-05','2026-04','2026-03','2026-02','2026-01'];
+	const months = $derived.by(() => {
+		const now = new Date(); const m: string[] = [];
+		for (let i = 7; i >= 0; i--) {
+			const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+			m.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+		}
+		return m;
+	});
 </script>
 
 <svelte:window onkeydown={(e) => { if (e.key === 'Escape') closeModal(); }} />
@@ -189,6 +198,7 @@
 		<option value="">Alle Monate</option>
 		{#each months as m}<option value={m}>{m}</option>{/each}
 	</select>
+	<input type="search" bind:value={searchFilter} placeholder="Suchen…" style="width:140px;font-size:.82rem" />
 	<button class="primary" onclick={() => showModal = true}><Icon name="plus" /> Neu</button>
 	<button onclick={() => (document.querySelector('input[type=file]') as HTMLInputElement)?.click()}><Icon name="upload" /> CSV</button>
 	<input type="file" accept=".csv" onchange={handleCsv} hidden />

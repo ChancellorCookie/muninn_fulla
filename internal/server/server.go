@@ -179,6 +179,15 @@ func Run() error {
 	// CSV Import
 	mux.HandleFunc("/api/import/csv", h.ImportCSV)
 
+	// Annual
+	mux.HandleFunc("/api/annual", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			h.AnnualSummary(w, r)
+		} else {
+			w.WriteHeader(405)
+		}
+	})
+
 	// Static frontend (SvelteKit build output) with SPA fallback
 	staticFS, err := fs.Sub(frontend, "frontend/build")
 	if err != nil {
@@ -226,6 +235,11 @@ func seedDefaultData(database *db.DB) {
 	}
 	if len(rts) == 0 {
 		seedDemoRecurrings(database)
+	}
+
+	txs, _ := database.GetTransactions("", "", "", "", 1)
+	if len(txs) == 0 {
+		seedDemoTransactions(database)
 	}
 }
 
@@ -316,4 +330,71 @@ func seedCategories(database *db.DB) {
 		})
 	}
 	log.Printf("Seeded %d default categories", len(builtin))
+}
+
+func seedDemoTransactions(database *db.DB) {
+	accts, _ := database.GetAccounts()
+	cats, _ := database.GetCategories(nil)
+	if len(accts) == 0 || len(cats) == 0 { return }
+
+	aid := accts[0].ID
+	catMap := map[string]string{}
+	for _, c := range cats { catMap[c.Name] = c.ID }
+
+	type txSeed struct {
+		date, desc, cat string
+		amt             float64
+		recurMatchID    string // "manual" to exclude from recurring matching
+	}
+	august := []txSeed{
+		// 2026-08-03
+		{"2026-08-03", "4.9085369.43 08/2026 160,42 4.9438661.73 08/2026 142,56 4.9641716.73 08/2026 8,57 — Generali Deutschland Lebensversicherung AG", "Vermögen", -311.55, "manual"},
+		{"2026-08-03", "Generali Deutschland Krankenversicherung AG Versicherungsnr.81522464 Beitrag Krankenversicherung — Generali Deutschland Krankenversicherung AG", "Gesundheit", -26.25, "manual"},
+		{"2026-08-03", "ADAC E.V. Jochums Max BEITRAG: 01.08.26-31.07.27 — Allg.Deutscher Automobil-Club ADAC e.V.", "Kfz/Mobilität", -129.00, "manual"},
+		{"2026-08-03", "010115314040 HAUSR/GLAS/HAFT/UNF/REISE 010826 — Generali Deutschland Versicherung AG", "Versicherungen", -75.29, "manual"},
+		{"2026-08-03", "Entgeltabrechnung siehe Anlage", "Sonstige Ausgaben", -5.90, ""},
+		{"2026-08-03", "2026-07-31T14:20 Debitk.3 2026-12 — ALDI SE U. CO. KG/KRUPPSTR. 51/DUISBURG/DE", "Lebensmittel", -9.21, ""},
+		{"2026-08-03", "2026-08-01T10:22 Debitk.3 2026-12 — Nanu-Nana//Moers/DE", "Sonstige Ausgaben", -9.85, ""},
+		{"2026-08-03", "2026-07-31T14:36 Debitk.3 2026-12 — Gartencenter Schloesser//Moers/DE", "Wohnung", -50.98, ""},
+		// 2026-08-04
+		{"2026-08-04", "LASTSCHRIFT easybank — easybank", "Sonstige Ausgaben", -15.00, ""},
+		// 2026-08-05
+		{"2026-08-05", "X70278 531 245 0X DATUM 05.08.2026, 15.34 UHR — Zentrale Zahlstelle Justiz", "Sonstige Ausgaben", -482.00, ""},
+		{"2026-08-05", "IWishThisWasForNFLTickets DATUM 05.08.2026, 11.11 UHR — Marcus Goeddecke", "Wohnung", -100.00, ""},
+		{"2026-08-05", "302-5640475-8638740 AMZN Mktp DE JT9DXSH19X2ZO44R — AMAZON PAYMENTS EUROPE S.C.A.", "Sonstige Ausgaben", -26.30, ""},
+		{"2026-08-05", "1052116795310/PP.6292.PP/. , Ihr Einkauf bei — PayPal Europe S.a.r.l. et Cie S.C.A", "Sonstige Ausgaben", -25.00, ""},
+		// 2026-08-06
+		{"2026-08-06", "06.08/17.36UHR OSTRING RC — GA NR00002205 BLZ35450000 3", "Unterhaltung", -150.00, ""},
+		{"2026-08-06", "360/053784502 VermogensSparplan — Max Jochums", "Vermögen", -99.99, "manual"},
+		{"2026-08-06", "360/053784503 VermogensSparplan — Max Jochums", "Vermögen", -99.98, "manual"},
+		{"2026-08-06", "360/053784501 VermogensSparplan — Max Jochums", "Vermögen", -99.98, "manual"},
+		// 2026-08-07
+		{"2026-08-07", "2026-08-06T13:34 Debitk.3 2026-12 — FRISCHECENTER GERDES//MOERS/DE", "Lebensmittel", -72.42, ""},
+		{"2026-08-07", "2026-08-06T12:23 Debitk.3 2026-12 — ALDI SE U. CO. KG/DRENNESWEG 3/MOERS/DE", "Lebensmittel", -33.18, ""},
+		// 2026-08-10
+		{"2026-08-10", "925511 DATUM 10.08.2026, 09.18 UHR — Kartbaan Winterswijk", "Unterhaltung", -820.20, ""},
+		{"2026-08-10", "INSTANT TRANSFER — PAYPAL", "Einkommen", 600.45, ""},
+		{"2026-08-10", "2026-08-07T14:35 Debitk.3 2026-12 — ALDI SAGT DANKE 01 066//Borken/DE", "Lebensmittel", -60.09, ""},
+		{"2026-08-10", "Trip — MAX JOCHUMS", "Wohnung", 2000.00, "manual"},
+		// 2026-08-11
+		{"2026-08-11", "DRK-BEITRAG 1315009366 STRNR 131/5995/4407 FA: FINANZAMT WESEL — Deutsches Rotes Kreuz Kreisverband Niederrhein e.V.", "Sonstige Ausgaben", -10.00, "manual"},
+	}
+
+	count := 0
+	for _, tx := range august {
+		cid := catMap[tx.cat]
+		if cid == "" {
+			cid = catMap["Sonstige Ausgaben"]
+		}
+		database.CreateTransactionWithStatus(core.CreateTransactionRequest{
+			AccountID:        aid,
+			CategoryID:       cid,
+			Amount:           tx.amt,
+			Description:      tx.desc,
+			Date:             tx.date,
+			RecurringMatchID: tx.recurMatchID,
+		}, "posted")
+		count++
+	}
+	log.Printf("Seeded %d demo transactions", count)
 }
