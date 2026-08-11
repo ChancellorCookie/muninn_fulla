@@ -102,6 +102,18 @@ func Run() error {
 	})
 	mux.HandleFunc("/api/transactions/bulk", h.BulkUpdateTransactions)
 	mux.HandleFunc("/api/transactions/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/api/transactions/")
+		if strings.HasPrefix(path, "toggle-exclude/") {
+			id := strings.TrimPrefix(path, "toggle-exclude/")
+			id = strings.TrimSuffix(id, "/")
+			if err := h.DB.ToggleExcludeTransaction(id); err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"status":"toggled"}`))
+			return
+		}
 		if r.Method == "DELETE" {
 			h.DeleteTransaction(w, r)
 		} else if r.Method == "PATCH" {
